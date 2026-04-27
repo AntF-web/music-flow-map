@@ -1,0 +1,729 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Music Gentrification Flow Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root {
+      --bg: #08111f;
+      --panel: rgba(10, 18, 32, 0.84);
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --origin: #2dd4bf;
+      --market: #fb7185;
+      --flow: #f43f5e;
+      --secondary: #a78bfa;
+      --soft: rgba(248, 250, 252, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100vw;
+      height: 100vh;
+      background: #08111f;
+      filter: saturate(0.78) contrast(1.05);
+    }
+
+    .leaflet-control-attribution { display: none; }
+
+    .panel {
+      position: absolute;
+      z-index: 1000;
+      background: var(--panel);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 60px rgba(0,0,0,.35);
+      backdrop-filter: blur(18px);
+    }
+
+    .header {
+      top: 24px;
+      left: 24px;
+      padding: 18px 20px;
+      border-radius: 24px;
+      max-width: 410px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(22px, 3vw, 34px);
+      line-height: 1;
+      letter-spacing: -0.055em;
+    }
+
+    .small {
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px 14px;
+      margin-top: 14px;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 99px;
+    }
+
+    .story-card {
+      right: 24px;
+      bottom: 112px;
+      width: min(440px, calc(100vw - 48px));
+      padding: 22px;
+      border-radius: 28px;
+    }
+
+    .period {
+      display: inline-flex;
+      align-items: center;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: rgba(244,63,94,.16);
+      color: #fecdd3;
+      font-weight: 800;
+      font-size: 12px;
+      letter-spacing: .04em;
+      text-transform: uppercase;
+    }
+
+    .story-title {
+      margin: 14px 0 8px;
+      font-size: 24px;
+      line-height: 1.05;
+      letter-spacing: -0.045em;
+    }
+
+    .route {
+      margin: 0;
+      color: #dbeafe;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .description {
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    .filter-list {
+      margin: 12px 0 0;
+      display: grid;
+      gap: 8px;
+      max-height: 170px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .filter-route {
+      border: 1px solid rgba(255,255,255,.10);
+      border-radius: 14px;
+      padding: 10px;
+      background: rgba(255,255,255,.05);
+      cursor: pointer;
+      color: #e2e8f0;
+      font-size: 12px;
+    }
+
+    .filter-route:hover { background: rgba(255,255,255,.10); }
+
+    .filter-route strong { color: white; }
+
+    .timeline {
+      left: 24px;
+      right: 24px;
+      bottom: 24px;
+      padding: 14px;
+      border-radius: 999px;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 42px 1fr 92px 88px;
+      gap: 14px;
+      align-items: center;
+    }
+
+    button {
+      height: 42px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.10);
+      color: white;
+      cursor: pointer;
+      transition: transform .2s, background .2s;
+      font-weight: 900;
+    }
+
+    #play { width: 42px; font-size: 17px; }
+    #reset { padding: 0 14px; font-size: 12px; }
+
+    button:hover {
+      transform: scale(1.04);
+      background: rgba(255,255,255,.16);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      appearance: none;
+      height: 8px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--origin), var(--secondary), var(--flow));
+      outline: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      border: 5px solid var(--flow);
+      box-shadow: 0 4px 18px rgba(244,63,94,.55);
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #fff;
+      border: 5px solid var(--flow);
+      box-shadow: 0 4px 18px rgba(244,63,94,.55);
+      cursor: pointer;
+    }
+
+    .year {
+      text-align: right;
+      font-size: 18px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+    }
+
+    .city-label {
+      padding: 6px 9px;
+      border-radius: 999px;
+      background: rgba(8, 17, 31, .82);
+      border: 1px solid rgba(255,255,255,.13);
+      color: #f8fafc;
+      font-size: 11px;
+      font-weight: 800;
+      box-shadow: 0 6px 22px rgba(0,0,0,.28);
+      white-space: nowrap;
+    }
+
+    .node {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      border: 3px solid white;
+      box-shadow: 0 0 0 8px rgba(255,255,255,.08), 0 0 24px currentColor;
+      cursor: pointer;
+    }
+
+    .origin { background: var(--origin); color: var(--origin); }
+    .market { background: var(--market); color: var(--market); }
+
+    .active-node { animation: pulse 1.55s ease-in-out infinite; }
+    .selected-node { box-shadow: 0 0 0 10px rgba(167,139,250,.25), 0 0 32px #a78bfa; }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.45); }
+    }
+
+    .flow-main {
+      stroke-linecap: round;
+      stroke-dasharray: 1 16;
+      animation: flow 1.1s linear infinite;
+      filter: drop-shadow(0 0 10px rgba(244,63,94,.75));
+    }
+
+    .flow-filter {
+      stroke-linecap: round;
+      stroke-dasharray: 8 13;
+      animation: flow 1.8s linear infinite;
+      filter: drop-shadow(0 0 8px rgba(167,139,250,.65));
+    }
+
+    .flow-glow {
+      stroke-linecap: round;
+      opacity: .24;
+      filter: blur(1px);
+    }
+
+    @keyframes flow { to { stroke-dashoffset: -34; } }
+
+    .flow-tag {
+      padding: 7px 11px;
+      border-radius: 999px;
+      background: rgba(244,63,94,.92);
+      color: white;
+      font-size: 11px;
+      font-weight: 900;
+      box-shadow: 0 10px 30px rgba(244,63,94,.35);
+      white-space: nowrap;
+    }
+
+    .hover-preview {
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(8,17,31,.94);
+      color: white;
+      border: 1px solid rgba(255,255,255,.14);
+      box-shadow: 0 10px 34px rgba(0,0,0,.36);
+      min-width: 180px;
+    }
+
+    .hover-preview strong {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .hover-preview span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .leaflet-popup-content-wrapper,
+    .leaflet-popup-tip {
+      background: rgba(8,17,31,.94);
+      color: white;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 14px;
+    }
+
+    .leaflet-popup-content {
+      margin: 12px 14px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 760px) {
+      .header {
+        top: 14px;
+        left: 14px;
+        right: 14px;
+        max-width: none;
+      }
+
+      .story-card {
+        left: 14px;
+        right: 14px;
+        bottom: 104px;
+        width: auto;
+        padding: 18px;
+      }
+
+      .story-title { font-size: 20px; }
+      .description { display: none; }
+
+      .timeline {
+        left: 14px;
+        right: 14px;
+        bottom: 14px;
+      }
+
+      .controls { grid-template-columns: 42px 1fr 70px; }
+      #reset { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+
+  <section class="panel header">
+    <h1>Popular Music: Appropriation Flow Map</h1>
+    <p class="small">Click any city to filter all connected routes. Hover for a quick preview.</p>
+    <div class="legend">
+      <div class="legend-item"><span class="legend-dot" style="background:var(--origin)"></span>origin</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--market)"></span>market</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--flow)"></span>timeline flow</div>
+      <div class="legend-item"><span class="legend-dot" style="background:var(--secondary)"></span>filtered flows</div>
+    </div>
+  </section>
+
+  <section class="panel story-card" id="story"></section>
+
+  <section class="panel timeline">
+    <div class="controls">
+      <button id="play" aria-label="Play timeline">▶</button>
+      <input id="slider" type="range" min="0" max="38" value="0" />
+      <button id="reset">ALL</button>
+      <div class="year" id="year">1880s</div>
+    </div>
+  </section>
+
+  <script>
+    const map = L.map('map', {
+      zoomControl: false,
+      worldCopyJump: true,
+      attributionControl: false
+    }).setView([28, -35], 3);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 19
+    }).addTo(map);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_only_labels/{z}/{x}/{y}{r}.png', {
+      subdomains: 'abcd',
+      maxZoom: 19,
+      pane: 'shadowPane'
+    }).addTo(map);
+
+    const places = {
+      south: ['U.S. South', [32.3, -90.2], 'origin', 'Black folk, blues roots, spirituals, and work-song traditions.'],
+      newYork: ['New York', [40.75, -73.99], 'market', 'Publishing, labels, media, Broadway, radio, streaming, and pop-business infrastructure.'],
+      newOrleans: ['New Orleans', [29.95, -90.07], 'origin', 'Jazz birthplace shaped by Black, Creole, Caribbean, brass-band, and street traditions.'],
+      chicago: ['Chicago', [41.88, -87.63], 'origin', 'Swing, blues, house, migration, and club-culture crossover hub.'],
+      memphis: ['Memphis', [35.15, -90.05], 'origin', 'Blues, soul, gospel, Sun Records, Stax, and rock crossover.'],
+      detroit: ['Detroit', [42.33, -83.05], 'origin', 'Motown, techno, Black pop futurism, and industrial urban modernity.'],
+      london: ['London', [51.51, -0.13], 'market', 'British rock, punk, club culture, pirate radio, grime, dubstep, garage, and global re-export.'],
+      la: ['Los Angeles', [34.05, -118.24], 'market', 'Hollywood, labels, celebrity media, pop packaging, and visual culture.'],
+      bronx: ['Bronx', [40.84, -73.86], 'origin', 'Hip-hop foundations in Black, Caribbean, and Latino youth culture.'],
+      seattle: ['Seattle', [47.61, -122.33], 'origin', 'Grunge and alternative rock transformed into a major-label authenticity market.'],
+      atlanta: ['Atlanta', [33.75, -84.39], 'origin', 'Trap and Southern hip-hop production as dominant global pop language.'],
+      stockholm: ['Stockholm', [59.33, 18.06], 'market', 'Global pop songwriting, production, and streaming-era export hub.'],
+      global: ['Platforms', [21, 8], 'market', 'Streaming, TikTok, algorithmic trend cycles, and viral monetization.'],
+      nyClubs: ['NYC Clubs', [40.72, -74.00], 'origin', 'Queer, Black, and Latino nightlife cultures behind disco and dance music.'],
+      kingston: ['Kingston', [17.98, -76.79], 'origin', 'Sound-system culture, reggae, dub, dancehall, and remix logic.'],
+      sanJuan: ['San Juan', [18.47, -66.10], 'origin', 'Reggaetón, dembow, underground mixtapes, and Caribbean urban music.'],
+      panama: ['Panama City', [8.98, -79.52], 'origin', 'Reggae en español and Afro-Caribbean Spanish-language dance music.'],
+      mexicoCity: ['Mexico City', [19.43, -99.13], 'market', 'Latin pop, rock en español, cumbia mutation, and transnational media markets.'],
+      buenosAires: ['Buenos Aires', [-34.60, -58.38], 'origin', 'Tango, rock nacional, electronic scenes, and Latin urban crossover.'],
+      rio: ['Rio de Janeiro', [-22.91, -43.17], 'origin', 'Samba, funk carioca, favela party culture, and exportable Brazilian identities.'],
+      saoPaulo: ['São Paulo', [-23.55, -46.63], 'market', 'Brazilian media, clubs, labels, festivals, and urban-pop commercialization.'],
+      havana: ['Havana', [23.11, -82.37], 'origin', 'Son, rumba, mambo, salsa roots, Afro-Cuban percussion, and exportable tropical modernity.'],
+      santoDomingo: ['Santo Domingo', [18.49, -69.93], 'origin', 'Merengue, bachata, dembow, and Dominican street-pop circuits.'],
+      medellin: ['Medellín', [6.24, -75.58], 'market', 'Reggaetón pop, Latin urban industry, labels, song camps, and streaming dominance.'],
+      barranquilla: ['Barranquilla', [10.98, -74.80], 'origin', 'Cumbia, champeta, carnival routes, Afro-Caribbean Colombian dance culture.'],
+      lima: ['Lima', [-12.05, -77.04], 'origin', 'Chicha, cumbia amazónica, Andean migration, and urban working-class psychedelia.'],
+      bristol: ['Bristol', [51.45, -2.59], 'origin', 'Trip-hop, sound-system culture, dub inheritance, and underground UK electronics.'],
+      manchester: ['Manchester', [53.48, -2.24], 'origin', 'Post-punk, rave, acid house, indie, and warehouse culture.'],
+      birmingham: ['Birmingham', [52.49, -1.89], 'origin', 'UK metal, bhangra, bass, and multicultural working-class music scenes.'],
+      croydon: ['Croydon', [51.37, -0.10], 'origin', 'Dubstep’s early underground and record-shop/radio network.'],
+      southLondon: ['South London', [51.45, -0.10], 'origin', 'UK garage, grime, drill, pirate radio, estates, clubs, and MC culture.'],
+      eastLondon: ['East London', [51.54, -0.02], 'origin', 'Grime, pirate radio, road rap, club mutations, and DIY video platforms.'],
+      lagos: ['Lagos', [6.52, 3.38], 'origin', 'Afrobeats, Afro-pop, street-pop, fuji inheritance, labels, clubs, and Nollywood adjacency.'],
+      accra: ['Accra', [5.56, -0.20], 'origin', 'Highlife, hiplife, azonto, afrobeats circuits, and diasporic pop exchange.'],
+      johannesburg: ['Johannesburg', [-26.20, 28.04], 'origin', 'Kwaito, amapiano, house, township groove, and dance-floor innovation.'],
+      kinshasa: ['Kinshasa', [-4.32, 15.31], 'origin', 'Congolese rumba, soukous, guitar virtuosity, and pan-African dance-band circuits.'],
+      luanda: ['Luanda', [-8.84, 13.23], 'origin', 'Kuduro, semba, kizomba, and Lusophone club circulation.'],
+      dakar: ['Dakar', [14.69, -17.45], 'origin', 'Mbalax, sabar percussion, hip-hop, and Francophone West African scenes.'],
+      abidjan: ['Abidjan', [5.36, -4.01], 'origin', 'Coupé-décalé, zouglou, dance culture, and Francophone club export.'],
+      cairo: ['Cairo', [30.04, 31.24], 'origin', 'Mahraganat, shaabi, cassette/pop circuits, and street wedding sound systems.'],
+      dar: ['Dar es Salaam', [-6.79, 39.21], 'origin', 'Bongo flava, taarab links, Swahili pop, and East African radio circuits.'],
+      nairobi: ['Nairobi', [-1.29, 36.82], 'origin', 'Gengetone, kapuka, East African hip-hop, and mobile-first youth scenes.']
+    };
+
+    const routes = [
+      ['1880s', 'Folk / blues roots', 'U.S. South', 'New York', 'Black folk traditions enter white-owned sheet music and entertainment markets.', 'south', 'newYork', [36, -84, 4]],
+      ['1920s', 'Jazz', 'New Orleans', 'New York', 'Jazz leaves local Black performance cultures and is packaged nationally.', 'newOrleans', 'newYork', [35, -83, 4]],
+      ['1940s', 'Swing', 'Chicago', 'New York', 'Black big-band innovation becomes mass dance culture.', 'chicago', 'newYork', [41, -81, 5]],
+      ['1950s', 'Rock ’n’ roll', 'Memphis', 'Los Angeles', 'R&B idioms are rebranded for white teen media markets.', 'memphis', 'la', [35, -104, 4]],
+      ['1960s', 'Soul / Motown', 'Detroit', 'New York', 'Black pop is polished for national crossover systems.', 'detroit', 'newYork', [42, -80, 5]],
+      ['1960s', 'Ska / reggae circuits', 'Kingston', 'London', 'Jamaican sound-system culture reshapes UK youth culture, then becomes marketable multicultural cool.', 'kingston', 'london', [35, -38, 3]],
+      ['1970s', 'Blues → rock', 'U.S. South', 'London', 'Blues authenticity is re-exported globally through British rock.', 'south', 'london', [43, -40, 3]],
+      ['1970s', 'Disco', 'NYC Clubs', 'Los Angeles', 'Queer, Black, and Latino dance culture becomes corporate nightlife.', 'nyClubs', 'la', [39, -96, 4]],
+      ['1970s', 'Salsa', 'Havana / San Juan', 'New York', 'Afro-Caribbean dance-band traditions are branded through New York Latin music industry circuits.', 'havana', 'newYork', [29, -74, 4]],
+      ['1980s', 'Hip-hop', 'Bronx', 'Los Angeles', 'A local youth culture becomes a global music-industry category.', 'bronx', 'la', [40, -96, 4]],
+      ['1980s', 'Samba / pagode', 'Rio de Janeiro', 'São Paulo', 'Afro-Brazilian neighborhood forms are redirected into television, labels, festivals, and national branding.', 'rio', 'saoPaulo', [-23, -45, 6]],
+      ['1980s', 'Highlife / hiplife roots', 'Accra', 'London', 'Ghanaian dance-band and rap hybrids travel through diaspora clubs before entering wider Afrobeats discourse.', 'accra', 'london', [31, -9, 3]],
+      ['1990s', 'Grunge / rap', 'Seattle', 'Los Angeles', 'Underground authenticity becomes a major-label identity product.', 'seattle', 'la', [43, -119, 4]],
+      ['1990s', 'Drum’n’bass / jungle', 'London', 'Global clubs', 'Breakbeat, reggae bass, rave, and Black British sound-system pressure are cleaned up for global electronic markets.', 'london', 'global', [39, 0, 3]],
+      ['1990s', 'Trip-hop', 'Bristol', 'London', 'Sound-system, dub, hip-hop, and post-rave atmospheres are repackaged as stylish urban cool.', 'bristol', 'london', [51.6, -1.4, 7]],
+      ['1990s', 'Tango nuevo / electronic tango', 'Buenos Aires', 'Europe', 'Local urban melancholy is remixed into lounge, world-music, and boutique electronic markets.', 'buenosAires', 'london', [9, -31, 3]],
+      ['1990s', 'Kwaito', 'Johannesburg', 'London', 'Post-apartheid township house and youth culture travel into global dance and world-music circuits.', 'johannesburg', 'london', [9, 11, 3]],
+      ['2000s', 'UK Garage / 2-step', 'South London', 'London', 'Pirate radio, clubs, and Black British dance culture are absorbed into pop-house and glossy vocal markets.', 'southLondon', 'london', [51.48, -0.18, 9]],
+      ['2000s', 'Dubstep', 'Croydon', 'London', 'A dark local bass scene is lifted from small clubs and record shops into global festival EDM circuits.', 'croydon', 'london', [51.43, -0.45, 9]],
+      ['2000s', 'Grime', 'East London', 'London', 'Estate-based MC culture, pirate radio, and DIY video channels become fashion, festival, and brand language.', 'eastLondon', 'london', [51.53, -0.08, 10]],
+      ['2000s', 'Reggaetón', 'Panama / San Juan', 'New York', 'Afro-Caribbean Spanish-language dance music becomes Latin urban pop for global markets.', 'sanJuan', 'newYork', [25, -73, 4]],
+      ['2000s', 'Cumbia villera / digital cumbia', 'Buenos Aires', 'Mexico City', 'Working-class cumbia mutations travel through labels, blogs, clubs, and transnational Latin alternative scenes.', 'buenosAires', 'mexicoCity', [-13, -80, 3]],
+      ['2000s', 'Coupé-décalé', 'Abidjan', 'Paris / London', 'Ivorian club culture and diaspora dance codes become exportable Francophone nightlife style.', 'abidjan', 'london', [23, -10, 3]],
+      ['2000s', 'Kuduro / kizomba', 'Luanda', 'Lisbon / London', 'Angolan club forms circulate through Lusophone diaspora before being packaged for European dance floors.', 'luanda', 'london', [17, 0, 3]],
+      ['2010s', 'Trap pop', 'Atlanta', 'Stockholm', 'Southern hip-hop production becomes global pop grammar.', 'atlanta', 'stockholm', [47, -36, 3]],
+      ['2010s', 'Funk carioca', 'Rio de Janeiro', 'São Paulo', 'Favela party sound is transformed into national and global Brazilian pop branding.', 'rio', 'saoPaulo', [-23, -45, 6]],
+      ['2010s', 'Bachata urbano / dembow', 'Santo Domingo', 'New York', 'Dominican street and romantic dance forms move through diaspora, streaming, and Latin urban playlists.', 'santoDomingo', 'newYork', [28, -74, 4]],
+      ['2010s', 'Latin trap / reggaetón pop', 'San Juan', 'Medellín', 'Caribbean underground and mixtape aesthetics become polished Latin pop infrastructure.', 'sanJuan', 'medellin', [11, -71, 5]],
+      ['2010s', 'Afrobeats', 'Lagos', 'London', 'Nigerian pop, club, and street sounds move through diaspora and streaming into global pop collaborations.', 'lagos', 'london', [31, -2, 3]],
+      ['2010s', 'Azonto / afrobeats', 'Accra', 'London', 'Ghanaian dance crazes and hiplife-pop energy are absorbed into pan-African and UK pop circuits.', 'accra', 'london', [31, -6, 3]],
+      ['2010s', 'Mahraganat', 'Cairo', 'Global platforms', 'Egyptian street wedding electronics are filtered through platform virality and global club curiosity.', 'cairo', 'global', [24, 20, 4]],
+      ['2010s', 'Bongo flava', 'Dar es Salaam', 'Nairobi', 'Swahili pop circulates through East African radio, mobile video, and regional star systems.', 'dar', 'nairobi', [-4, 38, 5]],
+      ['2020s', 'UK Drill', 'South London', 'Global platforms', 'Road rap, drill beats, and local slang spread through YouTube, TikTok, and international imitation scenes.', 'southLondon', 'global', [38, 4, 3]],
+      ['2020s', 'Amapiano', 'Johannesburg', 'Global platforms', 'Township groove and log-drum minimalism are pulled into global dance-pop, festivals, and influencer choreography.', 'johannesburg', 'global', [-5, 20, 3]],
+      ['2020s', 'Gengetone', 'Nairobi', 'Global platforms', 'Kenyan youth slang, mobile video aesthetics, and local club rhythms enter platform-led discovery cycles.', 'nairobi', 'global', [7, 29, 4]],
+      ['2020s', 'Congolese rumba / soukous revival', 'Kinshasa', 'Paris / London', 'Guitar-driven pan-African dance-band legacies are reframed through nostalgia, luxury culture, and diaspora festivals.', 'kinshasa', 'london', [15, 6, 3]],
+      ['2020s', 'Mbalax / Afro-pop crossover', 'Dakar', 'Paris / London', 'Senegalese percussion, hip-hop, and pop hybrids circulate through Francophone and diaspora markets.', 'dakar', 'london', [27, -13, 3]],
+      ['2020s', 'Chicha / cumbia amazónica', 'Lima', 'Mexico City', 'Andean-Amazonian migrant psychedelia becomes a crate-digger, festival, and boutique reissue aesthetic.', 'lima', 'mexicoCity', [2, -85, 3]],
+      ['2020s', 'Platform pop', 'Platforms', 'New York', 'Algorithms compress subculture-to-market cycles into weeks or days.', 'global', 'newYork', [31, -45, 3]]
+    ];
+
+    const markers = {};
+    const labels = [];
+    const filterLines = [];
+    let hoverLabel = null;
+    let selectedCity = null;
+
+    Object.entries(places).forEach(([key, [name, coords, kind, note]]) => {
+      const nodeIcon = L.divIcon({
+        className: '',
+        html: `<div class="node ${kind}" data-city="${key}"></div>`,
+        iconSize: [18,18],
+        iconAnchor: [9,9]
+      });
+      const labelIcon = L.divIcon({
+        className: '',
+        html: `<div class="city-label">${name}</div>`,
+        iconSize: [100,26],
+        iconAnchor: [50,-12]
+      });
+      markers[key] = L.marker(coords, { icon: nodeIcon }).addTo(map);
+      markers[key].bindPopup(`<strong>${name}</strong><br>${note}`);
+
+      markers[key].on('mouseover', () => showHover(key));
+      markers[key].on('mouseout', clearHover);
+      markers[key].on('click', () => filterCity(key));
+
+      labels.push(L.marker(coords, { icon: labelIcon, interactive: false }).addTo(map));
+    });
+
+    let mainLine, glowLine, flowTag;
+    let index = 0;
+    let timer;
+    let isPlaying = false;
+
+    const story = document.getElementById('story');
+    const slider = document.getElementById('slider');
+    const year = document.getElementById('year');
+    const play = document.getElementById('play');
+    const reset = document.getElementById('reset');
+
+    function connectedRoutes(key) {
+      return routes
+        .map((route, i) => ({ route, i }))
+        .filter(({ route }) => route[5] === key || route[6] === key);
+    }
+
+    function clearHover() {
+      if (hoverLabel) {
+        map.removeLayer(hoverLabel);
+        hoverLabel = null;
+      }
+    }
+
+    function showHover(key) {
+      clearHover();
+      const [name, coords, kind, note] = places[key];
+      const count = connectedRoutes(key).length;
+      hoverLabel = L.marker(coords, {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="hover-preview"><strong>${name}</strong><span>${count} connected flow${count === 1 ? '' : 's'}</span><span>${note}</span></div>`,
+          iconSize: [220, 86],
+          iconAnchor: [110, 98]
+        }),
+        interactive: false
+      }).addTo(map);
+    }
+
+    function arc(a, b) {
+      const points = [];
+      const steps = 90;
+      const [lat1, lng1] = a;
+      const [lat2, lng2] = b;
+      let lngDelta = lng2 - lng1;
+      if (Math.abs(lngDelta) > 180) lngDelta = lngDelta > 0 ? lngDelta - 360 : lngDelta + 360;
+      const distance = Math.abs(lngDelta);
+      const height = Math.min(18, Math.max(4, distance / 8));
+      for (let i = 0; i <= steps; i++) {
+        const t = i / steps;
+        let lng = lng1 + lngDelta * t;
+        if (lng > 180) lng -= 360;
+        if (lng < -180) lng += 360;
+        points.push([
+          lat1 + (lat2 - lat1) * t + Math.sin(Math.PI * t) * height * .28,
+          lng
+        ]);
+      }
+      return points;
+    }
+
+    function clearFilterLines() {
+      while (filterLines.length) map.removeLayer(filterLines.pop());
+      selectedCity = null;
+      Object.values(markers).forEach(marker => {
+        const el = marker.getElement();
+        if (el) el.querySelector('.node')?.classList.remove('selected-node');
+      });
+    }
+
+    function clearMainRoute() {
+      if (mainLine) map.removeLayer(mainLine);
+      if (glowLine) map.removeLayer(glowLine);
+      if (flowTag) map.removeLayer(flowTag);
+      mainLine = null;
+      glowLine = null;
+      flowTag = null;
+    }
+
+    function addRouteLine(route, style = 'main') {
+      const start = places[route[5]][1];
+      const end = places[route[6]][1];
+      const path = arc(start, end);
+
+      if (style === 'filter') {
+        const line = L.polyline(path, {
+          color: '#a78bfa',
+          weight: 4,
+          opacity: .82,
+          className: 'flow-filter'
+        }).addTo(map);
+        filterLines.push(line);
+        return line;
+      }
+
+      glowLine = L.polyline(path, {
+        color: '#f43f5e',
+        weight: 18,
+        opacity: .24,
+        className: 'flow-glow'
+      }).addTo(map);
+
+      mainLine = L.polyline(path, {
+        color: '#fb7185',
+        weight: 6,
+        opacity: .98,
+        className: 'flow-main'
+      }).addTo(map);
+
+      const midpoint = path[Math.floor(path.length * .52)];
+      flowTag = L.marker(midpoint, {
+        icon: L.divIcon({
+          className: '',
+          html: `<div class="flow-tag">${route[1]}</div>`,
+          iconAnchor: [45, 15]
+        }),
+        interactive: false
+      }).addTo(map);
+    }
+
+    function setActive(i, keepFilter = false) {
+      index = i;
+      const route = routes[i];
+      const [period, genre, fromName, toName, description, fromKey, toKey, camera] = route;
+
+      clearMainRoute();
+      if (!keepFilter) clearFilterLines();
+
+      Object.values(markers).forEach(marker => {
+        const el = marker.getElement();
+        if (el) el.querySelector('.node')?.classList.remove('active-node');
+      });
+
+      [fromKey, toKey].forEach(k => {
+        const el = markers[k].getElement();
+        if (el) el.querySelector('.node')?.classList.add('active-node');
+      });
+
+      addRouteLine(route, 'main');
+
+      story.innerHTML = `
+        <span class="period">${period}</span>
+        <h2 class="story-title">${genre}</h2>
+        <p class="route">${fromName} → ${toName}</p>
+        <p class="description">${description}</p>
+      `;
+
+      year.textContent = period;
+      slider.value = i;
+      map.flyTo([camera[0], camera[1]], camera[2], { duration: .85 });
+    }
+
+    function filterCity(key) {
+      clearFilterLines();
+      selectedCity = key;
+      const [name, coords] = places[key];
+      const related = connectedRoutes(key);
+
+      Object.values(markers).forEach(marker => {
+        const el = marker.getElement();
+        if (el) el.querySelector('.node')?.classList.remove('selected-node');
+      });
+      markers[key].getElement().querySelector('.node').classList.add('selected-node');
+
+      related.forEach(({ route }) => addRouteLine(route, 'filter'));
+
+      const list = related.length
+        ? related.map(({ route, i }) => `
+          <div class="filter-route" onclick="window.__setRoute(${i})">
+            <strong>${route[1]}</strong><br>${route[2]} → ${route[3]} · ${route[0]}
+          </div>
+        `).join('')
+        : '<div class="filter-route">No connected routes yet.</div>';
+
+      story.innerHTML = `
+        <span class="period">city filter</span>
+        <h2 class="story-title">${name}</h2>
+        <p class="route">${related.length} connected flow${related.length === 1 ? '' : 's'}</p>
+        <div class="filter-list">${list}</div>
+      `;
+
+      year.textContent = 'Filter';
+      map.flyTo(coords, 5, { duration: .8 });
+    }
+
+    window.__setRoute = function(i) {
+      setActive(i, true);
+    };
+
+    slider.addEventListener('input', e => setActive(Number(e.target.value)));
+
+    play.addEventListener('click', () => {
+      isPlaying = !isPlaying;
+      play.textContent = isPlaying ? 'Ⅱ' : '▶';
+      if (isPlaying) {
+        timer = setInterval(() => setActive((index + 1) % routes.length), 5200);
+      } else {
+        clearInterval(timer);
+      }
+    });
+
+    reset.addEventListener('click', () => {
+      clearFilterLines();
+      setActive(index);
+    });
+
+    setActive(0);
+  </script>
+</body>
+</html>
